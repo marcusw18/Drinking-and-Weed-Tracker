@@ -20,6 +20,9 @@ packages:
   GoogleGenerativeAI:
     url: https://github.com/google/generative-ai-swift
     from: "0.5.6"
+  GoogleSignIn:
+    url: https://github.com/google/GoogleSignIn-iOS
+    from: "7.0.0"
 
 targets:
   DrinkingTracker:
@@ -37,6 +40,13 @@ targets:
         NSCameraUsageDescription: "We analyze your face for visible signs of intoxication (redness, eye clarity)."
         NSMicrophoneUsageDescription: "Allows voice recording for slur detection analysis."
         UILaunchScreen: {}
+        CFBundleURLTypes:
+          - CFBundleTypeRole: Editor
+            CFBundleURLName: google-sign-in
+            CFBundleURLSchemes:
+              # Replace with your REVERSED_CLIENT_ID from GoogleService-Info.plist
+              - com.googleusercontent.apps.726612240820-79tbljdl4amr2hkc23otnhnhripr37u4
+
     entitlements:
       path: DrinkingTracker/DrinkingTracker.entitlements
     dependencies:
@@ -46,6 +56,10 @@ targets:
         product: Supabase
       - package: GoogleGenerativeAI
         product: GoogleGenerativeAI
+      - package: GoogleSignIn
+        product: GoogleSignIn
+      - package: GoogleSignIn
+        product: GoogleSignInSwift
       - target: DrinkingTrackerWatch
         embed: true
     settings:
