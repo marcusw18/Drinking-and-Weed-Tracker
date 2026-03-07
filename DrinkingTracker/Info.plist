@@ -1,0 +1,16 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<plist version="1.0">
+<dict>
+	<key>NSHealthShareUsageDescription</key>
+	<string>We read your heart rate and health metrics to estimate intoxication levels.</string>
+	<key>NSHealthUpdateUsageDescription</key>
+	<string>We log workout sessions when a drinking session is active.</string>
+	<key>NSCameraUsageDescription</key>
+	<string>We analyze your face for visible signs of intoxication (redness, eye clarity).</string>
+	<key>NSMicrophoneUsageDescription</key>
+	<string>Allows voice recording for slur detection analysis.</string>
+	<key>UILaunchScreen</key>
+	<dict/>
+</dict>
+</plist>

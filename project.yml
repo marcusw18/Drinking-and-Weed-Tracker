@@ -1,0 +1,77 @@
+name: DrinkingTracker
+options:
+  bundleIdPrefix: com.drinkingtracker
+  xcodeVersion: "15.4"
+  deploymentTarget:
+    iOS: "17.0"
+    watchOS: "10.0"
+  groupSortPosition: top
+  generateEmptyDirectories: true
+  indentWidth: 4
+  tabWidth: 4
+
+packages:
+  FirebaseSDK:
+    url: https://github.com/firebase/firebase-ios-sdk
+    from: "10.29.0"
+  Supabase:
+    url: https://github.com/supabase/supabase-swift
+    from: "2.5.0"
+  GoogleGenerativeAI:
+    url: https://github.com/google/generative-ai-swift
+    from: "0.5.6"
+
+targets:
+  DrinkingTracker:
+    type: application
+    platform: iOS
+    deploymentTarget: "17.0"
+    sources:
+      - DrinkingTracker
+    info:
+      path: DrinkingTracker/Info.plist
+      properties:
+        CFBundleDisplayName: "Drinking Tracker"
+        NSHealthShareUsageDescription: "We read your heart rate and health metrics to estimate intoxication levels."
+        NSHealthUpdateUsageDescription: "We log workout sessions when a drinking session is active."
+        NSCameraUsageDescription: "We analyze your face for visible signs of intoxication (redness, eye clarity)."
+        NSMicrophoneUsageDescription: "Allows voice recording for slur detection analysis."
+        UILaunchScreen: {}
+    entitlements:
+      path: DrinkingTracker/DrinkingTracker.entitlements
+    dependencies:
+      - package: FirebaseSDK
+        product: FirebaseAuth
+      - package: Supabase
+        product: Supabase
+      - package: GoogleGenerativeAI
+        product: GoogleGenerativeAI
+      - target: DrinkingTrackerWatch
+        embed: true
+    settings:
+      PRODUCT_BUNDLE_IDENTIFIER: com.drinkingtracker.app
+      SWIFT_VERSION: "5.9"
+      DEVELOPMENT_TEAM: ""
+
+  DrinkingTrackerWatch:
+    type: "watchos.application"
+    platform: watchOS
+    deploymentTarget: "10.0"
+    sources:
+      - WatchApp
+    info:
+      path: WatchApp/Info.plist
+      properties:
+        CFBundleDisplayName: "Drinking Tracker"
+        WKApplication: true
+        NSHealthShareUsageDescription: "We read health data from your watch for intoxication analysis."
+        NSMicrophoneUsageDescription: "We record a short voice clip for slur detection."
+    entitlements:
+      path: WatchApp/WatchApp.entitlements
+    dependencies:
+      - package: FirebaseSDK
+        product: FirebaseAuth
+    settings:
+      PRODUCT_BUNDLE_IDENTIFIER: com.drinkingtracker.watch
+      SWIFT_VERSION: "5.9"
+      DEVELOPMENT_TEAM: ""
