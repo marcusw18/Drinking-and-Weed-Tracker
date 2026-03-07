@@ -40,6 +40,30 @@ final class AnalysisViewModel {
         currentStep = .requestingWatch
         errorMessage = nil
 
+        // TEMPORARY: Test VoiceAnalyzer
+        Task {
+            do {
+                let allowed = await VoiceAnalyzer.shared.requestMicrophonePermission()
+                print("Mic allowed:", allowed)
+
+                if !allowed {
+                    print("Microphone permission denied")
+                    return
+                }
+
+                let audioURL = try await VoiceAnalyzer.shared.recordAudio(duration: 5)
+                print("Recorded file:", audioURL)
+                print("File exists:", FileManager.default.fileExists(atPath: audioURL.path))
+
+                let score = try await VoiceAnalyzer.shared.analyzeAudio(audioURL: audioURL)
+                print("Voice score:", score)
+
+                await VoiceAnalyzer.shared.cleanup()
+            } catch {
+                print("Voice analyzer error:", error.localizedDescription)
+            }
+        }
+
         // 1. Request Watch data (audio + health)
         await withTaskGroup(of: Void.self) { group in
             group.addTask {
