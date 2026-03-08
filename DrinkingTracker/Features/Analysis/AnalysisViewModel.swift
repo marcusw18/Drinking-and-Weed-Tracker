@@ -5,15 +5,14 @@ import UIKit
 final class AnalysisViewModel {
 
     enum AnalysisStep: String {
-        case idle = "idle"
-        case requestingWatch = "Requesting Watch data..."
+        case idle          = "idle"
         case capturingFace = "Capturing face photo..."
         case analyzingFace = "Analyzing face..."
-        case analyzingVoice = "Analyzing voice..."
-        case askingGemini = "Generating summary..."
-        case saving = "Saving results..."
-        case complete = "Complete"
-        case failed = "Analysis failed"
+        case fetchingHealth = "Reading health data..."
+        case askingGemini  = "Generating summary..."
+        case saving        = "Saving results..."
+        case complete      = "Complete"
+        case failed        = "Analysis failed"
     }
 
     var currentStep: AnalysisStep = .idle
@@ -21,14 +20,10 @@ final class AnalysisViewModel {
     var errorMessage: String? = nil
     var isRunning: Bool { currentStep != .idle && currentStep != .complete && currentStep != .failed }
 
-    // Collected data
     var capturedImage: UIImage? = nil
     var survey: PreAnalysisSurvey = PreAnalysisSurvey()
 
     @ObservationIgnored private let appState: AppState
-    @ObservationIgnored private let watchManager = WatchSessionManager.shared
-    @ObservationIgnored private var collectedAudioURL: URL? = nil
-    @ObservationIgnored private var collectedHealthData: [String: Any] = [:]
 
     init(appState: AppState) {
         self.appState = appState
@@ -37,19 +32,9 @@ final class AnalysisViewModel {
     // MARK: - Full Pipeline
 
     func runAnalysis(isManual: Bool) async {
-        currentStep = .requestingWatch
         errorMessage = nil
 
-        // 1. Request Watch data (audio + health)
-        await withTaskGroup(of: Void.self) { group in
-            group.addTask {
-                await self.requestWatchData()
-            }
-            // Give watch 75 seconds to respond (60s recording + transfer time)
-            try? await Task.sleep(for: .seconds(75))
-        }
-
-        // 2. Capture face (manual analysis only)
+        // 1. Face analysis (manual only — requires a captured UIImage)
         var blushScore: Double? = nil
         if isManual, let image = capturedImage {
             currentStep = .analyzingFace
@@ -58,34 +43,28 @@ final class AnalysisViewModel {
             }
         }
 
-        // 3. Analyze voice with Vulture server
-        var slurScore: Double? = nil
-        if let audioURL = collectedAudioURL {
-            currentStep = .analyzingVoice
-            slurScore = (try? await VultureService.shared.analyzeVoice(audioURL: audioURL))?.slurScore
-        }
-
-        // 4. Refresh health metrics
+        // 2. Refresh health metrics from HealthKit
+        currentStep = .fetchingHealth
         await HealthKitService.shared.refreshAll()
-        let hr   = HealthKitService.shared.latestHeartRate ?? (collectedHealthData["heartRate"] as? Double)
-        let hrv  = HealthKitService.shared.latestHRV ?? (collectedHealthData["hrv"] as? Double)
-        let spo2 = HealthKitService.shared.latestSpO2 ?? (collectedHealthData["spo2"] as? Double)
+        let hr   = HealthKitService.shared.latestHeartRate
+        let hrv  = HealthKitService.shared.latestHRV
+        let spo2 = HealthKitService.shared.latestSpO2
 
         appState.latestHeartRate = hr
-        appState.latestHRV = hrv
-        appState.latestSpO2 = spo2
+        appState.latestHRV       = hrv
+        appState.latestSpO2      = spo2
 
-        // 5. Gemini summary
+        // 3. Gemini summary
         currentStep = .askingGemini
         let summary = try? await GeminiService.shared.stageSummary(
             bac: appState.currentBAC,
             stage: appState.currentStage,
             heartRate: hr,
-            slurScore: slurScore,
+            slurScore: nil,
             blushScore: blushScore
         )
 
-        // 6. Build + save log
+        // 4. Build + save log
         currentStep = .saving
         let log = AnalysisLog(
             id: UUID(),
@@ -96,7 +75,7 @@ final class AnalysisViewModel {
             heartRate: hr,
             hrv: hrv,
             spo2: spo2,
-            slurScore: slurScore,
+            slurScore: nil,
             blushScore: blushScore,
             geminiSummary: summary,
             trigger: isManual ? .manual : .auto
@@ -109,24 +88,10 @@ final class AnalysisViewModel {
         currentStep = .complete
     }
 
-    // MARK: - Watch Data Collection
-
-    private func requestWatchData() async {
-        watchManager.onHealthDataReceived = { [weak self] data in
-            self?.collectedHealthData = data
-        }
-        watchManager.onAudioReceived = { [weak self] url in
-            self?.collectedAudioURL = url
-        }
-        watchManager.requestAnalysis()
-    }
-
     func reset() {
         currentStep = .idle
         result = nil
         errorMessage = nil
         capturedImage = nil
-        collectedAudioURL = nil
-        collectedHealthData = [:]
     }
 }

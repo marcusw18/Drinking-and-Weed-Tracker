@@ -178,21 +178,9 @@ struct DashboardView: View {
 
     // MARK: - Data Loading
 
-    private func syncWatchState() {
-        WatchSessionManager.shared.syncToWatch(
-            bac: appState.currentBAC,
-            stage: appState.currentStage.rawValue,
-            drinkCount: appState.drinkLogs.count,
-            sessionActive: appState.isSessionActive,
-            userId: appState.userId,
-            displayName: appState.firebaseUser?.email ?? ""
-        )
-    }
-
     private func setupTimers() {
         bacRefreshTimer = Timer.scheduledTimer(withTimeInterval: 60, repeats: true) { [weak appState] _ in
             appState?.refreshBAC()
-            Task { @MainActor in self.syncWatchState() }
         }
         autoTimer.onFire = { appState.showAnalysis = true }
         if appState.isSessionActive { autoTimer.start() }
@@ -225,7 +213,6 @@ struct DashboardView: View {
             appState.drinkLogs = l
         }
         appState.refreshBAC()
-        syncWatchState()
         await HealthKitService.shared.refreshAll()
         appState.latestHeartRate = HealthKitService.shared.latestHeartRate
         appState.latestHRV       = HealthKitService.shared.latestHRV

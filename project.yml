@@ -65,8 +65,6 @@ targets:
         product: GoogleSignInSwift
       - package: SmartSpectra
         product: SmartSpectraSwiftSDK
-      - target: DrinkingTrackerWatch
-        embed: true
     settings:
       PRODUCT_BUNDLE_IDENTIFIER: com.drinkingtracker.app
       SWIFT_VERSION: "5.9"
