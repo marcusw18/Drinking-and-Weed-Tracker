@@ -1,7 +1,7 @@
 import tempfile
 import os
 from fastapi import APIRouter, UploadFile, File, HTTPException
-from models.whisper_model import transcribe_audio
+from models.elevenlabs_model import transcribe_audio
 from models.slur_detector import compute_slur_score
 
 router = APIRouter()
@@ -10,7 +10,7 @@ router = APIRouter()
 @router.post("/voice")
 async def analyze_voice(audio: UploadFile = File(...)):
     """
-    Receive an audio file, transcribe it with Whisper, and return a slur score.
+    Receive an audio file, transcribe it with ElevenLabs Speech-to-Text, and return a slur score.
 
     Returns:
         {
