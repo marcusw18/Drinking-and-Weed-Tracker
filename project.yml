@@ -24,8 +24,8 @@ packages:
     url: https://github.com/google/GoogleSignIn-iOS
     from: "7.0.0"
   SmartSpectra:
-    url: https://github.com/Presage-Security/SmartSpectra-iOS-SDK
-    from: "1.0.0"
+    url: https://github.com/Presage-Security/SmartSpectra
+    branch: main
 
 targets:
   DrinkingTracker:
