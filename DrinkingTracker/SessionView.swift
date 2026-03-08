@@ -9,11 +9,11 @@ struct SessionView: View {
 
     private let displayTimer = Timer.publish(every: 1, on: .main, in: .common).autoconnect()
 
-    private let drinkTypes: [(icon: String, type: AlcoholType)] = [
-        ("martini.glass", .cocktail),
-        ("mug.fill",      .beer),
-        ("wineglass",     .wine),
-        ("cup.and.saucer.fill", .other)
+    private let drinkTypes: [(icon: String, label: String, type: AlcoholType)] = [
+        ("mug.fill",       "Beer",     .beer),
+        ("wineglass",      "Wine",     .wine),
+        ("martini.glass",  "Cocktail", .cocktail),
+        ("drop.fill",      "Spirits",  .spirits)
     ]
 
     private var sessionDrinks: [DrinkLog] {
@@ -65,15 +65,21 @@ struct SessionView: View {
                             .foregroundColor(AppTheme.Colors.textSecondary)
                     }
 
-                    HStack(spacing: 12) {
-                        ForEach(drinkTypes, id: \.icon) { item in
+                    HStack(spacing: 0) {
+                        ForEach(drinkTypes, id: \.label) { item in
                             Button { state.showAddDrink = true } label: {
-                                Image(systemName: item.icon)
-                                    .font(.system(size: 22))
-                                    .foregroundColor(AppTheme.Colors.textSecondary)
-                                    .frame(width: 60, height: 60)
-                                    .background(AppTheme.Colors.inputBackground)
-                                    .clipShape(Circle())
+                                VStack(spacing: 6) {
+                                    Image(systemName: item.icon)
+                                        .font(.system(size: 22))
+                                        .foregroundColor(AppTheme.Colors.textSecondary)
+                                        .frame(width: 54, height: 54)
+                                        .background(AppTheme.Colors.inputBackground)
+                                        .clipShape(Circle())
+                                    Text(item.label)
+                                        .font(AppTheme.Fonts.mono(10))
+                                        .foregroundColor(AppTheme.Colors.textSecondary)
+                                }
+                                .frame(maxWidth: .infinity)
                             }
                         }
                     }
@@ -85,32 +91,49 @@ struct SessionView: View {
                 .padding(.horizontal, 16)
                 .padding(.top, 10)
 
-                // MARK: Mood / Data Visualization
+                // MARK: Current Stage Description
                 VStack(alignment: .leading, spacing: 14) {
-                    HStack {
-                        Text("Data Visualization")
-                            .font(AppTheme.Fonts.mono(13))
-                            .foregroundColor(AppTheme.Colors.textPrimary)
-                        Spacer()
-                        Image(systemName: "slider.horizontal.3")
-                            .foregroundColor(AppTheme.Colors.textSecondary)
+                    // Stage label + description
+                    VStack(alignment: .leading, spacing: 6) {
+                        HStack {
+                            Text(appState.currentStage.label)
+                                .font(AppTheme.Fonts.mono(13, weight: .semibold))
+                                .foregroundColor(AppTheme.Colors.textPrimary)
+                            Spacer()
+                            Text(appState.currentStage.emoji)
+                                .font(.system(size: 20))
+                        }
+                        ForEach(appState.currentStage.recommendations, id: \.self) { rec in
+                            Text("· \(rec)")
+                                .font(AppTheme.Fonts.mono(12))
+                                .foregroundColor(AppTheme.Colors.textSecondary)
+                        }
                     }
 
-                    HStack(spacing: 16) {
-                        ForEach(0..<4) { index in
+                    Divider().background(AppTheme.Colors.divider)
+
+                    // How do you feel? — 5 stages
+                    Text("How do you feel?")
+                        .font(AppTheme.Fonts.mono(12))
+                        .foregroundColor(AppTheme.Colors.textSecondary)
+
+                    HStack(spacing: 0) {
+                        ForEach(0..<5) { index in
                             Button { selectedMood = index } label: {
                                 moodIcon(for: index)
-                                    .font(.system(size: 32))
+                                    .font(.system(size: 28))
                                     .foregroundColor(selectedMood == index
-                                        ? AppTheme.Colors.dotGreen
+                                        ? moodColor(for: index)
                                         : AppTheme.Colors.textTertiary)
                                     .overlay(
                                         Circle()
                                             .stroke(selectedMood == index
-                                                ? AppTheme.Colors.dotGreen
+                                                ? moodColor(for: index)
                                                 : Color.clear, lineWidth: 2.5)
-                                            .frame(width: 48, height: 48)
+                                            .frame(width: 44, height: 44)
                                     )
+                                    .frame(maxWidth: .infinity)
+                                    .padding(.vertical, 4)
                             }
                         }
                     }
@@ -153,13 +176,26 @@ struct SessionView: View {
         .sheet(isPresented: $state.showAddDrink) { AddDrinkView() }
     }
 
+    // Maps to: sober, relaxed, tipsy, drunk, veryDrunk
     @ViewBuilder
     private func moodIcon(for index: Int) -> some View {
         switch index {
-        case 0:  Image(systemName: "face.smiling.inverse")
-        case 1:  Image(systemName: "face.smiling")
-        case 2:  Image(systemName: "minus.circle")
-        default: Image(systemName: "face.dizzy")
+        case 0:  Image(systemName: "face.smiling.inverse")  // sober
+        case 1:  Image(systemName: "face.smiling")          // relaxed
+        case 2:  Image(systemName: "face.expressionless")   // tipsy
+        case 3:  Image(systemName: "face.dizzy")            // drunk
+        default: Image(systemName: "face.dizzy.fill")       // very drunk
+        }
+    }
+
+    // Green → yellow → orange → red as stages worsen
+    private func moodColor(for index: Int) -> Color {
+        switch index {
+        case 0:  return AppTheme.Colors.dotGreen
+        case 1:  return AppTheme.Colors.dotTeal
+        case 2:  return AppTheme.Colors.dotYellow
+        case 3:  return Color.orange
+        default: return AppTheme.Colors.dotRed
         }
     }
 }

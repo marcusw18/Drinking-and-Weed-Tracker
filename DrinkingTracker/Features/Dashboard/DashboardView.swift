@@ -24,9 +24,8 @@ struct DashboardView: View {
                     switch selectedTab {
                     case 0: homeTab
                     case 1: SessionView()
-                    case 2: HabitTrackerView()
-                    case 3: GeminiChatView()
-                    case 4: ScanView()
+                    case 2: GeminiChatView()
+                    case 3: ScanView()
                     default: homeTab
                     }
                 }
@@ -58,7 +57,7 @@ struct DashboardView: View {
 
                     case 1:
                         VStack(spacing: 10) {
-                            Button { selectedTab = 4 } label: {
+                            Button { selectedTab = 3 } label: {
                                 HStack(spacing: 12) {
                                     Image(systemName: "camera").font(.system(size: 18))
                                     Text("Scan").font(AppTheme.Fonts.mono(17, weight: .semibold))
@@ -85,7 +84,7 @@ struct DashboardView: View {
                         .padding(.bottom, 8)
                         .background(AppTheme.Colors.background)
 
-                    case 4:
+                    case 3:
                         VStack(spacing: 12) {
                             Button { state.showAnalysis = true } label: {
                                 Text("Scan")
@@ -189,11 +188,30 @@ struct DashboardView: View {
 
     private func loadInitialData() async {
         guard !appState.userId.isEmpty else { return }
-        async let profile = try? SupabaseService.shared.fetchProfile(userId: appState.userId)
-        async let logs   = try? SupabaseService.shared.fetchDrinkLogs(userId: appState.userId)
-        let (p, l) = await (profile, logs)
-        if let p { appState.userProfile = p }
-        if let l { appState.drinkLogs   = l }
+
+        // Fetch or create profile — drink_logs has a FK to user_profiles,
+        // so a row must exist before any drink can be saved.
+        do {
+            if let p = try await SupabaseService.shared.fetchProfile(userId: appState.userId) {
+                appState.userProfile = p
+            } else {
+                let defaultProfile = UserProfile(
+                    userId: appState.userId,
+                    weightKg: 70,
+                    heightCm: 170,
+                    biologicalSex: .other,
+                    displayName: appState.firebaseUser?.email ?? ""
+                )
+                try await SupabaseService.shared.upsertProfile(defaultProfile)
+                appState.userProfile = defaultProfile
+            }
+        } catch {
+            print("Profile setup error: \(error)")
+        }
+
+        if let l = try? await SupabaseService.shared.fetchDrinkLogs(userId: appState.userId) {
+            appState.drinkLogs = l
+        }
         appState.refreshBAC()
         await HealthKitService.shared.refreshAll()
         appState.latestHeartRate = HealthKitService.shared.latestHeartRate
@@ -377,26 +395,24 @@ struct CustomTabBar: View {
     private let tabs: [(icon: String, index: Int)] = [
         ("house",         0),
         ("martini.glass", 1),
-        ("calendar",      2),
-        ("bubble.left",   3),
-        ("camera",        4)
+        ("bubble.left",   2),
+        ("camera",        3)
     ]
 
     var body: some View {
-        HStack {
+        HStack(spacing: 0) {
             ForEach(tabs, id: \.index) { tab in
-                Spacer()
                 Button { selectedTab = tab.index } label: {
                     Image(systemName: tab.icon)
                         .font(.system(size: 22))
                         .foregroundColor(selectedTab == tab.index
                             ? AppTheme.Colors.tabActive
                             : AppTheme.Colors.tabInactive)
+                        .frame(maxWidth: .infinity)
+                        .padding(.vertical, 10)
                 }
-                Spacer()
             }
         }
-        .padding(.top, 10)
         .padding(.bottom, 28)
         .background(AppTheme.Colors.background)
     }
