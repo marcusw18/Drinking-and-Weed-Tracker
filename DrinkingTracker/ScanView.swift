@@ -1,15 +1,18 @@
 import SwiftUI
-import AVFoundation
-import Combine
 import SmartSpectraSwiftSDK
 
 // MARK: - Scan View
 
 struct ScanView: View {
     @Environment(AppState.self) private var appState
-    @StateObject private var smartSpectra = SmartSpectraManager()
+    @ObservedObject private var sdk = SmartSpectraSwiftSDK.shared
+    @ObservedObject private var vitalsProcessor = SmartSpectraVitalsProcessor.shared
+
     @State private var results = ScanResults()
     @State private var isScanning = false
+    @State private var frameSkip = 0
+
+    private let pollTimer = Timer.publish(every: 2, on: .main, in: .common).autoconnect()
 
     var body: some View {
         ScrollView {
@@ -33,16 +36,14 @@ struct ScanView: View {
                     .padding(.top, 8)
                     .padding(.horizontal, 20)
 
-                // MARK: Camera / SmartSpectra Viewfinder
+                // MARK: Camera Viewfinder
                 ZStack {
                     RoundedRectangle(cornerRadius: AppTheme.Radius.card)
                         .fill(Color.black)
 
-                    // SmartSpectraView handles camera, PPG measurement, and session lifecycle
                     SmartSpectraView()
                         .clipShape(RoundedRectangle(cornerRadius: AppTheme.Radius.card))
 
-                    // Face silhouette overlay
                     FaceSilhouette()
                         .stroke(Color.white.opacity(isScanning ? 0.3 : 0.7), lineWidth: 2)
                         .frame(width: 180, height: 220)
@@ -100,7 +101,6 @@ struct ScanView: View {
                             title: "Flushed Face",
                             value: results.flushFaceScore.map { severityLabel($0) } ?? "--"
                         )
-                        .padding(.horizontal, 0)
                     }
                     .padding(.horizontal, 16)
                     .padding(.top, 10)
@@ -109,31 +109,30 @@ struct ScanView: View {
                 Spacer(minLength: 140)
             }
         }
-        .onAppear {
-            isScanning = true
+        .onAppear { isScanning = true }
+        .onDisappear { isScanning = false }
+        // Poll metrics every 2 seconds
+        .onReceive(pollTimer) { _ in readMetrics() }
+        // Run Vision on camera frames from SmartSpectraVitalsProcessor
+        .onChange(of: vitalsProcessor.imageOutput) { _, image in
+            guard let image else { return }
+            frameSkip += 1
+            // Only analyze every 3rd frame to avoid overwhelming Vision
+            if frameSkip % 3 == 0 { runVisionAnalysis(on: image) }
         }
-        .onDisappear {
-            isScanning = false
-            smartSpectra.cancelSubscriptions()
-        }
-        // Heart rate from SmartSpectra PPG
-        .onReceive(smartSpectra.$heartRate) { bpm in
-            guard let bpm else { return }
+    }
+
+    // MARK: - Metrics Polling
+
+    private func readMetrics() {
+        // Try real-time edge metrics first, fall back to completed session buffer
+        let pulse = sdk.edgeMetrics?.pulse ?? sdk.metricsBuffer?.pulse
+
+        if let bpm = pulse?.rate.last?.value {
             results.heartRate = bpm
             appState.latestHeartRate = bpm
-            pushResultsToAppState()
         }
-        // Focus derived from HRV
-        .onReceive(smartSpectra.$focusScore) { score in
-            guard let score else { return }
-            results.focusScore = score
-            pushResultsToAppState()
-        }
-        // Camera frames for Vision face analysis
-        .onReceive(smartSpectra.$latestFrame) { frame in
-            guard let frame else { return }
-            runVisionAnalysis(on: frame)
-        }
+        pushResultsToAppState()
     }
 
     // MARK: - Vision Analysis
@@ -178,82 +177,6 @@ struct ScanView: View {
         case ..<0.75: return "Fair"
         default:      return "Good"
         }
-    }
-}
-
-// MARK: - SmartSpectra Manager
-
-/// Observes SmartSpectraSwiftSDK.shared and SmartSpectraVitalsProcessor.shared.
-/// SmartSpectraView() owns the session lifecycle — this class only subscribes to published values.
-@MainActor
-final class SmartSpectraManager: ObservableObject {
-    @Published var heartRate: Double? = nil
-    @Published var focusScore: Double? = nil
-    /// Camera frame published by SmartSpectraVitalsProcessor (enabled via setImageOutputEnabled).
-    @Published var latestFrame: UIImage? = nil
-
-    private var cancellables = Set<AnyCancellable>()
-
-    init() {
-        let sdk = SmartSpectraSwiftSDK.shared
-        sdk.setApiKey(Config.smartSpectraAPIKey)
-        sdk.setSmartSpectraMode(.continuous)
-        sdk.setCameraPosition(.front)
-        // Enable imageOutput on SmartSpectraVitalsProcessor so Vision can read camera frames
-        sdk.setImageOutputEnabled(true)
-
-        subscribeToMetrics()
-    }
-
-    private func subscribeToMetrics() {
-        let sdk = SmartSpectraSwiftSDK.shared
-        let processor = SmartSpectraVitalsProcessor.shared
-
-        // Real-time edge metrics: heart rate from pulse rate
-        sdk.$edgeMetrics
-            .receive(on: RunLoop.main)
-            .sink { [weak self] metrics in
-                guard let self, let metrics else { return }
-                if let bpm = metrics.pulse.rate.last?.value {
-                    self.heartRate = bpm
-                }
-                // Derive focus from HRV: normalize ~20ms (poor) to ~80ms (good)
-                if let hrv = metrics.pulse.rmssd.last?.value {
-                    self.focusScore = min(max((hrv - 20.0) / 60.0, 0.0), 1.0)
-                }
-            }
-            .store(in: &cancellables)
-
-        // Also pick up completed session metrics from metricsBuffer
-        sdk.$metricsBuffer
-            .receive(on: RunLoop.main)
-            .sink { [weak self] buffer in
-                guard let self, let buffer else { return }
-                if let bpm = buffer.pulse.rate.last?.value {
-                    self.heartRate = bpm
-                }
-                if let hrv = buffer.pulse.rmssd.last?.value {
-                    self.focusScore = min(max((hrv - 20.0) / 60.0, 0.0), 1.0)
-                }
-            }
-            .store(in: &cancellables)
-
-        // Camera frames for Vision face analysis (throttled — every 3rd emission)
-        var frameCount = 0
-        processor.$imageOutput
-            .receive(on: RunLoop.main)
-            .sink { [weak self] image in
-                guard let self, let image else { return }
-                frameCount += 1
-                if frameCount % 3 == 0 {        // ~1 Vision call per 3 frames
-                    self.latestFrame = image
-                }
-            }
-            .store(in: &cancellables)
-    }
-
-    func cancelSubscriptions() {
-        cancellables.removeAll()
     }
 }
 

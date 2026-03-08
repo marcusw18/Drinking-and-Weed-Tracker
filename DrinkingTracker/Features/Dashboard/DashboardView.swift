@@ -41,7 +41,7 @@ struct DashboardView: View {
                             selectedTab = 1
                         } label: {
                             HStack(spacing: 12) {
-                                Image(systemName: "martini.glass").font(.system(size: 18))
+                                Image(systemName: "wineglass.fill").font(.system(size: 18))
                                 Text("Start Drinking").font(AppTheme.Fonts.mono(17, weight: .semibold))
                             }
                             .foregroundColor(AppTheme.Colors.accentWhite)
@@ -394,7 +394,7 @@ struct CustomTabBar: View {
 
     private let tabs: [(icon: String, index: Int)] = [
         ("house",         0),
-        ("martini.glass", 1),
+        ("timer",         1),
         ("bubble.left",   2),
         ("camera",        3)
     ]

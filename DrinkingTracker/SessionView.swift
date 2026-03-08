@@ -5,15 +5,14 @@ import SwiftUI
 struct SessionView: View {
     @Environment(AppState.self) private var appState
     @State private var now: Date = Date()
-    @State private var selectedMood: Int = 0
 
     private let displayTimer = Timer.publish(every: 1, on: .main, in: .common).autoconnect()
 
     private let drinkTypes: [(icon: String, label: String, type: AlcoholType)] = [
-        ("mug.fill",       "Beer",     .beer),
-        ("wineglass",      "Wine",     .wine),
-        ("martini.glass",  "Cocktail", .cocktail),
-        ("drop.fill",      "Spirits",  .spirits)
+        ("mug.fill",      "Beer",     .beer),
+        ("wineglass",     "Wine",     .wine),
+        ("wineglass.fill","Cocktail", .cocktail),
+        ("drop.fill",     "Spirits",  .spirits)
     ]
 
     private var sessionDrinks: [DrinkLog] {
@@ -31,6 +30,16 @@ struct SessionView: View {
         let m = (elapsedSeconds % 3600) / 60
         let s = elapsedSeconds % 60
         return String(format: "%02dh : %02dm : %02ds", h, m, s)
+    }
+
+    // Maps stage index (0-4) to the five display stages
+    private let displayStages: [IntoxicationStage] = [
+        .sober, .relaxed, .tipsy, .drunk, .veryDrunk
+    ]
+
+    // Highlighted index — clamp .danger to index 4
+    private var activeStageIndex: Int {
+        min(appState.currentStage.rawValue, 4)
     }
 
     var body: some View {
@@ -91,56 +100,76 @@ struct SessionView: View {
                 .padding(.horizontal, 16)
                 .padding(.top, 10)
 
-                // MARK: Current Stage Description
+                // MARK: Current Stage — system determined
                 VStack(alignment: .leading, spacing: 14) {
-                    // Stage label + description
-                    VStack(alignment: .leading, spacing: 6) {
-                        HStack {
+
+                    // Stage label + description (auto-updates from appState.currentStage)
+                    HStack(alignment: .top) {
+                        VStack(alignment: .leading, spacing: 4) {
                             Text(appState.currentStage.label)
-                                .font(AppTheme.Fonts.mono(13, weight: .semibold))
+                                .font(AppTheme.Fonts.mono(15, weight: .semibold))
                                 .foregroundColor(AppTheme.Colors.textPrimary)
-                            Spacer()
-                            Text(appState.currentStage.emoji)
-                                .font(.system(size: 20))
-                        }
-                        ForEach(appState.currentStage.recommendations, id: \.self) { rec in
-                            Text("· \(rec)")
-                                .font(AppTheme.Fonts.mono(12))
+                            Text("BAC \(String(format: "%.3f", appState.currentBAC))%")
+                                .font(AppTheme.Fonts.mono(11))
                                 .foregroundColor(AppTheme.Colors.textSecondary)
+                        }
+                        Spacer()
+                        Text(appState.currentStage.emoji)
+                            .font(.system(size: 32))
+                    }
+
+                    // Stage-specific recommendations
+                    VStack(alignment: .leading, spacing: 6) {
+                        ForEach(appState.currentStage.recommendations, id: \.self) { rec in
+                            HStack(alignment: .top, spacing: 6) {
+                                Circle()
+                                    .fill(appState.currentStage.color)
+                                    .frame(width: 5, height: 5)
+                                    .padding(.top, 5)
+                                Text(rec)
+                                    .font(AppTheme.Fonts.mono(12))
+                                    .foregroundColor(AppTheme.Colors.textSecondary)
+                            }
                         }
                     }
 
                     Divider().background(AppTheme.Colors.divider)
 
-                    // How do you feel? — 5 stages
-                    Text("How do you feel?")
-                        .font(AppTheme.Fonts.mono(12))
+                    // Intoxication level row — read-only, system determined
+                    Text("Intoxication Level")
+                        .font(AppTheme.Fonts.mono(11))
                         .foregroundColor(AppTheme.Colors.textSecondary)
 
                     HStack(spacing: 0) {
-                        ForEach(0..<5) { index in
-                            Button { selectedMood = index } label: {
-                                moodIcon(for: index)
-                                    .font(.system(size: 28))
-                                    .foregroundColor(selectedMood == index
-                                        ? moodColor(for: index)
-                                        : AppTheme.Colors.textTertiary)
+                        ForEach(Array(displayStages.enumerated()), id: \.offset) { index, stage in
+                            let isActive = index == activeStageIndex
+                            VStack(spacing: 4) {
+                                Text(stage.emoji)
+                                    .font(.system(size: 26))
+                                    .opacity(isActive ? 1.0 : 0.25)
                                     .overlay(
                                         Circle()
-                                            .stroke(selectedMood == index
-                                                ? moodColor(for: index)
-                                                : Color.clear, lineWidth: 2.5)
+                                            .stroke(isActive ? stage.color : Color.clear, lineWidth: 2.5)
                                             .frame(width: 44, height: 44)
                                     )
-                                    .frame(maxWidth: .infinity)
-                                    .padding(.vertical, 4)
+                                    .scaleEffect(isActive ? 1.1 : 1.0)
+                                    .animation(.spring(response: 0.3), value: activeStageIndex)
+
+                                Circle()
+                                    .fill(isActive ? stage.color : Color.clear)
+                                    .frame(width: 4, height: 4)
                             }
+                            .frame(maxWidth: .infinity)
                         }
                     }
                 }
                 .padding(16)
                 .background(AppTheme.Colors.cardBackground)
                 .cornerRadius(AppTheme.Radius.card)
+                .overlay(
+                    RoundedRectangle(cornerRadius: AppTheme.Radius.card)
+                        .stroke(appState.currentStage.color.opacity(0.4), lineWidth: 1.5)
+                )
                 .cardShadow()
                 .padding(.horizontal, 16)
                 .padding(.top, 12)
@@ -174,29 +203,6 @@ struct SessionView: View {
         }
         .onReceive(displayTimer) { now = $0 }
         .sheet(isPresented: $state.showAddDrink) { AddDrinkView() }
-    }
-
-    // Maps to: sober, relaxed, tipsy, drunk, veryDrunk
-    @ViewBuilder
-    private func moodIcon(for index: Int) -> some View {
-        switch index {
-        case 0:  Image(systemName: "face.smiling.inverse")  // sober
-        case 1:  Image(systemName: "face.smiling")          // relaxed
-        case 2:  Image(systemName: "face.expressionless")   // tipsy
-        case 3:  Image(systemName: "face.dizzy")            // drunk
-        default: Image(systemName: "face.dizzy.fill")       // very drunk
-        }
-    }
-
-    // Green → yellow → orange → red as stages worsen
-    private func moodColor(for index: Int) -> Color {
-        switch index {
-        case 0:  return AppTheme.Colors.dotGreen
-        case 1:  return AppTheme.Colors.dotTeal
-        case 2:  return AppTheme.Colors.dotYellow
-        case 3:  return Color.orange
-        default: return AppTheme.Colors.dotRed
-        }
     }
 }
 

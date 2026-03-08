@@ -1,5 +1,6 @@
 import SwiftUI
 import FirebaseCore
+import SmartSpectraSwiftSDK
 
 @main
 struct DrinkingTrackerApp: App {
@@ -8,6 +9,12 @@ struct DrinkingTrackerApp: App {
 
     init() {
         FirebaseApp.configure()
+        // Configure SmartSpectra once at launch so SmartSpectraView() is ready when shown
+        let sdk = SmartSpectraSwiftSDK.shared
+        sdk.setApiKey(Config.smartSpectraAPIKey)
+        sdk.setSmartSpectraMode(.continuous)
+        sdk.setCameraPosition(.front)
+        sdk.setImageOutputEnabled(true)
     }
 
     var body: some Scene {
