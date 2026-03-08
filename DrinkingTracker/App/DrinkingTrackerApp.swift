@@ -1,5 +1,6 @@
 import SwiftUI
 import FirebaseCore
+import AVFoundation
 import SmartSpectraSwiftSDK
 
 @main
@@ -9,12 +10,13 @@ struct DrinkingTrackerApp: App {
 
     init() {
         FirebaseApp.configure()
-        // Configure SmartSpectra once at launch so SmartSpectraView() is ready when shown
+        // Configure SmartSpectra once at launch so SmartSpectraView() is ready when shown.
+        // Do NOT call setImageOutputEnabled or startProcessing — SmartSpectraView() owns the
+        // camera session and manages the internal VitalsProcessor itself.
         let sdk = SmartSpectraSwiftSDK.shared
         sdk.setApiKey(Config.smartSpectraAPIKey)
         sdk.setSmartSpectraMode(.continuous)
-        sdk.setCameraPosition(.front)
-        sdk.setImageOutputEnabled(true)
+        sdk.setCameraPosition(AVCaptureDevice.Position.front)
     }
 
     var body: some Scene {
