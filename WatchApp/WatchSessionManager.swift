@@ -2,23 +2,26 @@ import Foundation
 import WatchConnectivity
 import HealthKit
 import AVFoundation
+import CoreMotion
+import UserNotifications
 
-/// Apple Watch-side session manager.
-/// Listens for capture requests from the iPhone, records voice + reads health data, sends back.
+// MARK: - Watch Session Manager (Watch side)
+// Handles WatchConnectivity, 30-second audio recording, CoreMotion movement,
+// HealthKit reads, and receives drunkenness score + auth context from iPhone.
+
 @MainActor
 final class WatchSessionManagerWatch: NSObject, ObservableObject, WCSessionDelegate {
 
     static let shared = WatchSessionManagerWatch()
 
     @Published var isCapturing = false
-    @Published var captureSecondsRemaining = 60
-    @Published var currentStageEmoji = "😊"
-    @Published var currentStageLabel = "Sober"
-    @Published var currentBAC: Double = 0.0
+    @Published var captureSecondsRemaining = 30
 
     private let healthStore = HKHealthStore()
+    private let motionManager = CMMotionManager()
     private var audioRecorder: AVAudioRecorder?
     private var countdownTimer: Timer?
+    private var accelerometerSamples: [Double] = []
 
     private override init() {
         super.init()
@@ -31,21 +34,40 @@ final class WatchSessionManagerWatch: NSObject, ObservableObject, WCSessionDeleg
 
     // MARK: - WCSessionDelegate
 
-    func session(_ session: WCSession, activationDidCompleteWith state: WCSessionActivationState, error: Error?) {}
+    func session(_ session: WCSession,
+                 activationDidCompleteWith state: WCSessionActivationState,
+                 error: Error?) {}
 
+    /// iPhone requests a capture
     func session(_ session: WCSession, didReceiveMessage message: [String: Any]) {
         guard message["action"] as? String == "startCapture" else { return }
         Task { await startCapture() }
     }
 
+    /// Receives BAC / stage / auth / score updates from iPhone
     func session(_ session: WCSession, didReceiveApplicationContext context: [String: Any]) {
-        // Receive BAC / stage updates from phone
-        if let bac = context["bac"] as? Double { currentBAC = bac }
-        if let stageRaw = context["stage"] as? Int,
-           let stage = IntoxicationStageWatch(rawValue: stageRaw) {
-            currentStageEmoji = stage.emoji
-            currentStageLabel = stage.label
-        }
+        let state = WatchAppState.shared
+
+        // Auth sync
+        if let uid = context["userId"] as? String, !uid.isEmpty { state.userId = uid }
+        if let name = context["displayName"] as? String { state.displayName = name }
+
+        // Session
+        if let bac = context["bac"] as? Double { state.currentBAC = bac }
+        if let raw = context["stage"] as? Int { state.currentStageRaw = raw }
+        if let drinks = context["drinkCount"] as? Int { state.drinkCount = drinks }
+        if let active = context["sessionActive"] as? Bool { state.sessionActive = active }
+
+        // Analysis result (computed on iPhone after Vulture + health scoring)
+        if let score = context["drunkennessScore"] as? Int { state.drunkennessScore = score }
+        if let slur = context["slurLabel"] as? String { state.slurLabel = slur }
+        if let hr = context["heartRate"] as? Double { state.latestHeartRate = hr }
+    }
+
+    // MARK: - Manual Trigger (from WatchRecordView)
+
+    func triggerCapture() {
+        Task { await startCapture() }
     }
 
     // MARK: - Capture Pipeline
@@ -53,70 +75,111 @@ final class WatchSessionManagerWatch: NSObject, ObservableObject, WCSessionDeleg
     private func startCapture() async {
         guard !isCapturing else { return }
         isCapturing = true
-        captureSecondsRemaining = 60
+        captureSecondsRemaining = 30
+        accelerometerSamples = []
 
-        // Start countdown UI
+        startMotionTracking()
+
         countdownTimer = Timer.scheduledTimer(withTimeInterval: 1, repeats: true) { [weak self] _ in
             guard let self else { return }
             Task { @MainActor in
-                self.captureSecondsRemaining -= 1
+                if self.captureSecondsRemaining > 0 { self.captureSecondsRemaining -= 1 }
             }
         }
 
-        // 1. Record voice
-        let audioURL = await recordAudio(duration: 60)
+        // 1. Record 30-second voice clip
+        let audioURL = await recordAudio(duration: 30)
 
-        // 2. Read health data
+        // 2. Read HealthKit
         let healthData = await readHealthData()
 
-        // Stop countdown
+        // 3. Compute movement score
+        let movScore = stopMotionTracking()
+        WatchAppState.shared.movementScore = movScore
+
         countdownTimer?.invalidate()
         countdownTimer = nil
 
-        // 3. Send health data immediately via message
+        // 4. Send health + movement to iPhone
         var payload = healthData
         payload["type"] = "healthData"
-        WCSession.default.sendMessage(payload, replyHandler: nil)
+        payload["movementScore"] = movScore
+        if WCSession.default.isReachable {
+            WCSession.default.sendMessage(payload, replyHandler: nil)
+        }
 
-        // 4. Transfer audio file
+        // 5. Transfer audio — iPhone will POST to Vulture, compute score, send back
         if let url = audioURL {
             WCSession.default.transferFile(url, metadata: ["type": "voiceClip"])
         }
 
         isCapturing = false
-        captureSecondsRemaining = 60
+        captureSecondsRemaining = 30
     }
 
-    // MARK: - Audio Recording
+    // MARK: - Audio Recording (30 seconds)
 
     private func recordAudio(duration: TimeInterval) async -> URL? {
         let url = FileManager.default.temporaryDirectory
-            .appendingPathComponent("watchCapture.m4a")
+            .appendingPathComponent("watchCapture_\(Int(Date().timeIntervalSince1970)).m4a")
 
         let settings: [String: Any] = [
             AVFormatIDKey: Int(kAudioFormatMPEG4AAC),
-            AVSampleRateKey: 12000,
+            AVSampleRateKey: 16000,
             AVNumberOfChannelsKey: 1,
             AVEncoderAudioQualityKey: AVAudioQuality.medium.rawValue
         ]
 
         do {
+            let audioSession = AVAudioSession.sharedInstance()
+            try audioSession.setCategory(.record, mode: .default)
+            try audioSession.setActive(true)
             audioRecorder = try AVAudioRecorder(url: url, settings: settings)
             audioRecorder?.record(forDuration: duration)
             try await Task.sleep(for: .seconds(duration))
+            audioRecorder?.stop()
+            try? audioSession.setActive(false)
             return url
         } catch {
+            print("WatchAudio error: \(error)")
             return nil
         }
     }
 
-    // MARK: - Health Data
+    // MARK: - CoreMotion — Accelerometer jerkiness → movement impairment
+
+    private func startMotionTracking() {
+        guard motionManager.isAccelerometerAvailable else { return }
+        motionManager.accelerometerUpdateInterval = 0.1
+        motionManager.startAccelerometerUpdates(to: .main) { [weak self] data, _ in
+            guard let data else { return }
+            let mag = sqrt(
+                data.acceleration.x * data.acceleration.x +
+                data.acceleration.y * data.acceleration.y +
+                data.acceleration.z * data.acceleration.z
+            )
+            self?.accelerometerSamples.append(mag)
+        }
+    }
+
+    /// Stops accelerometer and returns 0–1 movement impairment score.
+    /// Standard deviation: ~0.05 = steady, ~0.30+ = very erratic.
+    private func stopMotionTracking() -> Double {
+        motionManager.stopAccelerometerUpdates()
+        let s = accelerometerSamples
+        guard s.count > 10 else { return 0 }
+        let mean = s.reduce(0, +) / Double(s.count)
+        let variance = s.map { ($0 - mean) * ($0 - mean) }.reduce(0, +) / Double(s.count)
+        return min(sqrt(variance) / 0.30, 1.0)
+    }
+
+    // MARK: - HealthKit
 
     private func readHealthData() async -> [String: Any] {
         var data: [String: Any] = [:]
-
         if let hr = await fetchLatest(type: .heartRate, unit: HKUnit(from: "count/min")) {
             data["heartRate"] = hr
+            await MainActor.run { WatchAppState.shared.latestHeartRate = hr }
         }
         if let hrv = await fetchLatest(type: .heartRateVariabilitySDNN, unit: .secondUnit(with: .milli)) {
             data["hrv"] = hrv
@@ -124,24 +187,19 @@ final class WatchSessionManagerWatch: NSObject, ObservableObject, WCSessionDeleg
         if let spo2 = await fetchLatest(type: .oxygenSaturation, unit: .percent()) {
             data["spo2"] = spo2
         }
-
         return data
     }
 
-    private func fetchLatest(type quantityTypeID: HKQuantityTypeIdentifier, unit: HKUnit) async -> Double? {
-        let type = HKQuantityType(quantityTypeID)
+    private func fetchLatest(type id: HKQuantityTypeIdentifier, unit: HKUnit) async -> Double? {
+        let type = HKQuantityType(id)
         let sort = NSSortDescriptor(key: HKSampleSortIdentifierEndDate, ascending: false)
-
-        return await withCheckedContinuation { continuation in
-            let query = HKSampleQuery(sampleType: type, predicate: nil, limit: 1, sortDescriptors: [sort]) { _, samples, _ in
-                let value = (samples?.first as? HKQuantitySample)?.quantity.doubleValue(for: unit)
-                continuation.resume(returning: value)
+        return await withCheckedContinuation { cont in
+            let q = HKSampleQuery(sampleType: type, predicate: nil, limit: 1, sortDescriptors: [sort]) { _, samples, _ in
+                cont.resume(returning: (samples?.first as? HKQuantitySample)?.quantity.doubleValue(for: unit))
             }
-            healthStore.execute(query)
+            healthStore.execute(q)
         }
     }
-
-    // MARK: - HealthKit Auth
 
     private func requestHealthAuthorization() {
         let types: Set<HKObjectType> = [
@@ -153,7 +211,9 @@ final class WatchSessionManagerWatch: NSObject, ObservableObject, WCSessionDeleg
     }
 }
 
-/// Mirror of IntoxicationStage for Watch (no SwiftUI Color dependency)
+// MARK: - IntoxicationStageWatch
+
+/// Mirror of IntoxicationStage for Watch — no SwiftUI Color dependency.
 enum IntoxicationStageWatch: Int {
     case sober = 0, relaxed, tipsy, drunk, veryDrunk, danger
 
