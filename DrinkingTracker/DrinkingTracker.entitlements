@@ -6,6 +6,8 @@
     <array>
         <string>group.com.drinkingtracker</string>
     </array>
+    <key>com.apple.developer.sign-in-with-apple</key>
+    <string>Default</string>
     <key>com.apple.developer.healthkit</key>
     <true/>
     <key>com.apple.developer.healthkit.access</key>
