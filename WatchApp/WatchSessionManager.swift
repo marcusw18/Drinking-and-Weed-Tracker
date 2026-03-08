@@ -17,11 +17,18 @@ final class WatchSessionManagerWatch: NSObject, ObservableObject, WCSessionDeleg
     @Published var isCapturing = false
     @Published var captureSecondsRemaining = 30
 
+    /// Seconds until the next automatic 15-minute analysis fires (0 when no session)
+    @Published var secondsUntilNextCapture: Int = 0
+
     private let healthStore = HKHealthStore()
     private let motionManager = CMMotionManager()
     private var audioRecorder: AVAudioRecorder?
-    private var countdownTimer: Timer?
+    private var recordingCountdownTimer: Timer?
+    private var autoAnalysisTimer: Timer?      // fires every 15 min during session
+    private var autoCountdownTimer: Timer?     // decrements secondsUntilNextCapture each second
     private var accelerometerSamples: [Double] = []
+
+    private static let autoIntervalSeconds = 15 * 60   // 15 minutes
 
     private override init() {
         super.init()
@@ -56,12 +63,54 @@ final class WatchSessionManagerWatch: NSObject, ObservableObject, WCSessionDeleg
         if let bac = context["bac"] as? Double { state.currentBAC = bac }
         if let raw = context["stage"] as? Int { state.currentStageRaw = raw }
         if let drinks = context["drinkCount"] as? Int { state.drinkCount = drinks }
-        if let active = context["sessionActive"] as? Bool { state.sessionActive = active }
+        if let active = context["sessionActive"] as? Bool {
+            let wasActive = state.sessionActive
+            state.sessionActive = active
+            // Start/stop 15-min auto-analysis timer when session state changes
+            if active && !wasActive { startAutoAnalysisTimer() }
+            else if !active && wasActive { stopAutoAnalysisTimer() }
+        }
 
         // Analysis result (computed on iPhone after Vulture + health scoring)
         if let score = context["drunkennessScore"] as? Int { state.drunkennessScore = score }
         if let slur = context["slurLabel"] as? String { state.slurLabel = slur }
         if let hr = context["heartRate"] as? Double { state.latestHeartRate = hr }
+    }
+
+    // MARK: - Auto-Analysis Timer (15-minute interval)
+
+    private func startAutoAnalysisTimer() {
+        stopAutoAnalysisTimer()
+        secondsUntilNextCapture = Self.autoIntervalSeconds
+
+        // Fires every 15 minutes to trigger automatic analysis
+        autoAnalysisTimer = Timer.scheduledTimer(
+            withTimeInterval: TimeInterval(Self.autoIntervalSeconds),
+            repeats: true
+        ) { [weak self] _ in
+            Task { await self?.startCapture() }
+        }
+
+        // UI countdown: decrement every second
+        autoCountdownTimer = Timer.scheduledTimer(withTimeInterval: 1, repeats: true) { [weak self] _ in
+            Task { @MainActor [weak self] in
+                guard let self else { return }
+                if self.secondsUntilNextCapture > 0 {
+                    self.secondsUntilNextCapture -= 1
+                } else {
+                    // Reset after a capture fires
+                    self.secondsUntilNextCapture = Self.autoIntervalSeconds
+                }
+            }
+        }
+    }
+
+    private func stopAutoAnalysisTimer() {
+        autoAnalysisTimer?.invalidate()
+        autoAnalysisTimer = nil
+        autoCountdownTimer?.invalidate()
+        autoCountdownTimer = nil
+        secondsUntilNextCapture = 0
     }
 
     // MARK: - Manual Trigger (from WatchRecordView)
@@ -80,7 +129,7 @@ final class WatchSessionManagerWatch: NSObject, ObservableObject, WCSessionDeleg
 
         startMotionTracking()
 
-        countdownTimer = Timer.scheduledTimer(withTimeInterval: 1, repeats: true) { [weak self] _ in
+        recordingCountdownTimer = Timer.scheduledTimer(withTimeInterval: 1, repeats: true) { [weak self] _ in
             guard let self else { return }
             Task { @MainActor in
                 if self.captureSecondsRemaining > 0 { self.captureSecondsRemaining -= 1 }
@@ -97,8 +146,12 @@ final class WatchSessionManagerWatch: NSObject, ObservableObject, WCSessionDeleg
         let movScore = stopMotionTracking()
         WatchAppState.shared.movementScore = movScore
 
-        countdownTimer?.invalidate()
-        countdownTimer = nil
+        recordingCountdownTimer?.invalidate()
+        recordingCountdownTimer = nil
+        // Reset auto-countdown to full 15 min after each capture
+        if WatchAppState.shared.sessionActive {
+            secondsUntilNextCapture = Self.autoIntervalSeconds
+        }
 
         // 4. Send health + movement to iPhone
         var payload = healthData
