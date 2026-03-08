@@ -23,19 +23,19 @@ struct LoginView: View {
                 // MARK: - Header
                 VStack(alignment: .leading, spacing: 6) {
                     Text(isSignUp ? "Sign up" : "Sign in")
-                        .font(.system(size: 36, weight: .bold, design: .monospaced))
-                        .foregroundColor(.black)
+                        .font(AppTheme.Fonts.title(36))
+                        .foregroundColor(AppTheme.Colors.textPrimary)
 
                     HStack(spacing: 4) {
                         Text(isSignUp ? "Already have an account?" : "New user?")
-                            .font(.system(size: 14, design: .monospaced))
-                            .foregroundColor(.gray)
+                            .font(AppTheme.Fonts.mono(14))
+                            .foregroundColor(AppTheme.Colors.textSecondary)
                         Button(isSignUp ? "Sign in" : "Create an account") {
                             isSignUp.toggle()
                             errorMessage = nil
                         }
-                        .font(.system(size: 14, weight: .bold, design: .monospaced))
-                        .foregroundColor(.black)
+                        .font(AppTheme.Fonts.mono(14, weight: .bold))
+                        .foregroundColor(AppTheme.Colors.textPrimary)
                     }
                 }
                 .padding(.top, 60)
@@ -43,46 +43,41 @@ struct LoginView: View {
 
                 // MARK: - Form Fields
                 VStack(spacing: 12) {
-
-                    // Email Field
                     HStack(spacing: 12) {
                         Image(systemName: "envelope")
-                            .foregroundColor(.gray)
+                            .foregroundColor(AppTheme.Colors.textSecondary)
                             .frame(width: 20)
                         TextField("Email Address", text: $email)
-                            .font(.system(size: 14, design: .monospaced))
+                            .font(AppTheme.Fonts.mono(14))
                             .keyboardType(.emailAddress)
                             .autocapitalization(.none)
                             .disableAutocorrection(true)
                     }
                     .padding(.horizontal, 16)
                     .padding(.vertical, 18)
-                    .background(Color(.systemGray6))
-                    .cornerRadius(10)
+                    .background(AppTheme.Colors.inputBackground)
+                    .cornerRadius(AppTheme.Radius.field)
 
-                    // Password Field
                     HStack(spacing: 12) {
                         Image(systemName: "lock")
-                            .foregroundColor(.gray)
+                            .foregroundColor(AppTheme.Colors.textSecondary)
                             .frame(width: 20)
                         if isPasswordVisible {
                             TextField("Password", text: $password)
-                                .font(.system(size: 14, design: .monospaced))
+                                .font(AppTheme.Fonts.mono(14))
                         } else {
                             SecureField("Password", text: $password)
-                                .font(.system(size: 14, design: .monospaced))
+                                .font(AppTheme.Fonts.mono(14))
                         }
-                        Button {
-                            isPasswordVisible.toggle()
-                        } label: {
+                        Button { isPasswordVisible.toggle() } label: {
                             Image(systemName: isPasswordVisible ? "eye.slash" : "eye")
-                                .foregroundColor(.gray)
+                                .foregroundColor(AppTheme.Colors.textSecondary)
                         }
                     }
                     .padding(.horizontal, 16)
                     .padding(.vertical, 18)
-                    .background(Color(.systemGray6))
-                    .cornerRadius(10)
+                    .background(AppTheme.Colors.inputBackground)
+                    .cornerRadius(AppTheme.Radius.field)
                 }
                 .padding(.horizontal, 24)
                 .padding(.top, 32)
@@ -90,7 +85,7 @@ struct LoginView: View {
                 // MARK: - Error / Info Message
                 if let message = errorMessage {
                     Text(message)
-                        .font(.system(size: 13, design: .monospaced))
+                        .font(AppTheme.Fonts.mono(13))
                         .foregroundColor(message.contains("sent") ? .green : .red)
                         .padding(.horizontal, 24)
                         .padding(.top, 8)
@@ -98,13 +93,11 @@ struct LoginView: View {
 
                 // MARK: - Forgot Password (sign-in only)
                 if !isSignUp {
-                    Button("Forgot Password?") {
-                        forgotPassword()
-                    }
-                    .font(.system(size: 13, design: .monospaced))
-                    .foregroundColor(.black)
-                    .padding(.horizontal, 24)
-                    .padding(.top, 10)
+                    Button("Forgot Password?") { forgotPassword() }
+                        .font(AppTheme.Fonts.mono(13))
+                        .foregroundColor(AppTheme.Colors.textPrimary)
+                        .padding(.horizontal, 24)
+                        .padding(.top, 10)
                 }
 
                 // MARK: - Primary Button
@@ -113,17 +106,17 @@ struct LoginView: View {
                 } label: {
                     Group {
                         if isLoading {
-                            ProgressView().tint(.white)
+                            ProgressView().tint(AppTheme.Colors.accentWhite)
                         } else {
                             Text(isSignUp ? "Create Account" : "Login")
-                                .font(.system(size: 16, weight: .semibold, design: .monospaced))
-                                .foregroundColor(.white)
+                                .font(AppTheme.Fonts.mono(16, weight: .semibold))
+                                .foregroundColor(AppTheme.Colors.accentWhite)
                         }
                     }
                     .frame(maxWidth: .infinity)
                     .frame(height: 56)
-                    .background(Color.black)
-                    .cornerRadius(12)
+                    .background(AppTheme.Colors.accentBlack)
+                    .cornerRadius(AppTheme.Radius.button)
                 }
                 .disabled(isLoading)
                 .padding(.horizontal, 24)
@@ -131,16 +124,12 @@ struct LoginView: View {
 
                 // MARK: - Divider
                 HStack {
-                    Rectangle()
-                        .fill(Color(.systemGray4))
-                        .frame(height: 1)
+                    Rectangle().fill(AppTheme.Colors.divider).frame(height: 1)
                     Text("or")
-                        .font(.system(size: 13, design: .monospaced))
-                        .foregroundColor(.gray)
+                        .font(AppTheme.Fonts.mono(13))
+                        .foregroundColor(AppTheme.Colors.textSecondary)
                         .padding(.horizontal, 12)
-                    Rectangle()
-                        .fill(Color(.systemGray4))
-                        .frame(height: 1)
+                    Rectangle().fill(AppTheme.Colors.divider).frame(height: 1)
                 }
                 .padding(.horizontal, 24)
                 .padding(.top, 28)
@@ -149,20 +138,17 @@ struct LoginView: View {
                 VStack(spacing: 14) {
 
                     // Continue with Google
-                    Button {
-                        signInWithGoogle()
-                    } label: {
+                    Button { signInWithGoogle() } label: {
                         HStack(spacing: 12) {
-                            GoogleLogoView()
-                                .frame(width: 20, height: 20)
+                            GoogleLogoView().frame(width: 20, height: 20)
                             Text("Continue with Google")
-                                .font(.system(size: 15, design: .monospaced))
-                                .foregroundColor(.black)
+                                .font(AppTheme.Fonts.mono(15))
+                                .foregroundColor(AppTheme.Colors.textPrimary)
                         }
                         .frame(maxWidth: .infinity)
                         .padding(.vertical, 16)
-                        .background(Color(.systemGray6))
-                        .cornerRadius(10)
+                        .background(AppTheme.Colors.inputBackground)
+                        .cornerRadius(AppTheme.Radius.field)
                     }
 
                     // Continue with Apple
@@ -176,7 +162,7 @@ struct LoginView: View {
                     .signInWithAppleButtonStyle(.black)
                     .frame(maxWidth: .infinity)
                     .frame(height: 50)
-                    .cornerRadius(10)
+                    .cornerRadius(AppTheme.Radius.field)
                 }
                 .padding(.horizontal, 24)
                 .padding(.top, 20)
@@ -184,7 +170,7 @@ struct LoginView: View {
                 Spacer(minLength: 40)
             }
         }
-        .background(Color.white)
+        .background(AppTheme.Colors.background)
         .ignoresSafeArea()
     }
 
@@ -232,38 +218,6 @@ struct LoginView: View {
         return true
     }
 
-    // MARK: - Apple Sign-In
-
-    private func handleAppleSignIn(result: Result<ASAuthorization, Error>) {
-        switch result {
-        case .success(let auth):
-            guard
-                let credential = auth.credential as? ASAuthorizationAppleIDCredential,
-                let tokenData = credential.identityToken,
-                let token = String(data: tokenData, encoding: .utf8)
-            else {
-                errorMessage = "Apple Sign-In failed. Please try again."
-                return
-            }
-            let firebaseCredential = OAuthProvider.appleCredential(
-                withIDToken: token,
-                rawNonce: appleNonce,
-                fullName: credential.fullName
-            )
-            isLoading = true
-            Auth.auth().signIn(with: firebaseCredential) { _, error in
-                isLoading = false
-                errorMessage = error?.localizedDescription
-            }
-        case .failure(let error):
-            // ASAuthorizationError.canceled (code 1001) means user dismissed — don't show error
-            let nsError = error as NSError
-            if nsError.code != ASAuthorizationError.canceled.rawValue {
-                errorMessage = error.localizedDescription
-            }
-        }
-    }
-
     // MARK: - Google Sign-In
 
     private func signInWithGoogle() {
@@ -304,7 +258,38 @@ struct LoginView: View {
         }
     }
 
-    // MARK: - Nonce Helpers (required for Apple Sign-In with Firebase)
+    // MARK: - Apple Sign-In
+
+    private func handleAppleSignIn(result: Result<ASAuthorization, Error>) {
+        switch result {
+        case .success(let auth):
+            guard
+                let credential = auth.credential as? ASAuthorizationAppleIDCredential,
+                let tokenData = credential.identityToken,
+                let token = String(data: tokenData, encoding: .utf8)
+            else {
+                errorMessage = "Apple Sign-In failed. Please try again."
+                return
+            }
+            let firebaseCredential = OAuthProvider.appleCredential(
+                withIDToken: token,
+                rawNonce: appleNonce,
+                fullName: credential.fullName
+            )
+            isLoading = true
+            Auth.auth().signIn(with: firebaseCredential) { _, error in
+                isLoading = false
+                errorMessage = error?.localizedDescription
+            }
+        case .failure(let error):
+            let nsError = error as NSError
+            if nsError.code != ASAuthorizationError.canceled.rawValue {
+                errorMessage = error.localizedDescription
+            }
+        }
+    }
+
+    // MARK: - Nonce Helpers
 
     private func randomNonceString(length: Int = 32) -> String {
         var randomBytes = [UInt8](repeating: 0, count: length)
@@ -318,71 +303,45 @@ struct LoginView: View {
     }
 }
 
-// MARK: - Google Logo (drawn with SwiftUI shapes)
+// MARK: - Google Logo
 struct GoogleLogoView: View {
     var body: some View {
         Canvas { context, size in
             let center = CGPoint(x: size.width / 2, y: size.height / 2)
             let radius = size.width / 2
 
-            // Blue arc (top-right)
             var bluePath = Path()
-            bluePath.addArc(center: center, radius: radius,
-                            startAngle: .degrees(-30), endAngle: .degrees(90), clockwise: false)
-            bluePath.addLine(to: center)
-            bluePath.closeSubpath()
+            bluePath.addArc(center: center, radius: radius, startAngle: .degrees(-30), endAngle: .degrees(90), clockwise: false)
+            bluePath.addLine(to: center); bluePath.closeSubpath()
             context.fill(bluePath, with: .color(Color(red: 0.26, green: 0.52, blue: 0.96)))
 
-            // Green arc (bottom-right)
             var greenPath = Path()
-            greenPath.addArc(center: center, radius: radius,
-                             startAngle: .degrees(90), endAngle: .degrees(210), clockwise: false)
-            greenPath.addLine(to: center)
-            greenPath.closeSubpath()
+            greenPath.addArc(center: center, radius: radius, startAngle: .degrees(90), endAngle: .degrees(210), clockwise: false)
+            greenPath.addLine(to: center); greenPath.closeSubpath()
             context.fill(greenPath, with: .color(Color(red: 0.23, green: 0.73, blue: 0.33)))
 
-            // Yellow arc (bottom-left)
             var yellowPath = Path()
-            yellowPath.addArc(center: center, radius: radius,
-                              startAngle: .degrees(210), endAngle: .degrees(330), clockwise: false)
-            yellowPath.addLine(to: center)
-            yellowPath.closeSubpath()
+            yellowPath.addArc(center: center, radius: radius, startAngle: .degrees(210), endAngle: .degrees(330), clockwise: false)
+            yellowPath.addLine(to: center); yellowPath.closeSubpath()
             context.fill(yellowPath, with: .color(Color(red: 0.98, green: 0.73, blue: 0.02)))
 
-            // Red arc (top-left)
             var redPath = Path()
-            redPath.addArc(center: center, radius: radius,
-                           startAngle: .degrees(330), endAngle: .degrees(330 + 60), clockwise: false)
-            redPath.addLine(to: center)
-            redPath.closeSubpath()
+            redPath.addArc(center: center, radius: radius, startAngle: .degrees(330), endAngle: .degrees(390), clockwise: false)
+            redPath.addLine(to: center); redPath.closeSubpath()
             context.fill(redPath, with: .color(Color(red: 0.92, green: 0.26, blue: 0.21)))
 
-            // White inner circle
             let innerRadius = radius * 0.65
             var innerCircle = Path()
-            innerCircle.addEllipse(in: CGRect(
-                x: center.x - innerRadius,
-                y: center.y - innerRadius,
-                width: innerRadius * 2,
-                height: innerRadius * 2
-            ))
+            innerCircle.addEllipse(in: CGRect(x: center.x - innerRadius, y: center.y - innerRadius, width: innerRadius * 2, height: innerRadius * 2))
             context.fill(innerCircle, with: .color(.white))
 
-            // Blue G bar (horizontal cutout)
             let barHeight = radius * 0.28
-            let barRect = CGRect(
-                x: center.x - radius * 0.05,
-                y: center.y - barHeight / 2,
-                width: radius * 1.05,
-                height: barHeight
-            )
-            let barPath = Path(roundedRect: barRect, cornerRadius: barHeight / 2)
-            context.fill(barPath, with: .color(Color(red: 0.26, green: 0.52, blue: 0.96)))
+            let barRect = CGRect(x: center.x - radius * 0.05, y: center.y - barHeight / 2, width: radius * 1.05, height: barHeight)
+            context.fill(Path(roundedRect: barRect, cornerRadius: barHeight / 2), with: .color(Color(red: 0.26, green: 0.52, blue: 0.96)))
         }
     }
 }
 
 #Preview {
-    LoginView()
-        .environment(AppState())
+    LoginView().environment(AppState())
 }

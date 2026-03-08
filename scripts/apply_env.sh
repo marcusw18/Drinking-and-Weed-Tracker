@@ -25,15 +25,17 @@ SUPABASE_URL="${vars[SUPABASE_URL]:-}"
 SUPABASE_ANON_KEY="${vars[SUPABASE_ANON_KEY]:-}"
 GEMINI_API_KEY="${vars[GEMINI_API_KEY]:-}"
 VULTURE_SERVER_URL="${vars[VULTURE_SERVER_URL]:-http://localhost:8000}"
+SMART_SPECTRA_API_KEY="${vars[SMART_SPECTRA_API_KEY]:-}"
 
 cat > "$OUTPUT" << SWIFT
 // AUTO-GENERATED — do not commit this file.
 // Regenerate by running: ./scripts/apply_env.sh
 enum Secrets {
-    static let supabaseURL      = "${SUPABASE_URL}"
-    static let supabaseAnonKey  = "${SUPABASE_ANON_KEY}"
-    static let geminiAPIKey     = "${GEMINI_API_KEY}"
-    static let vultureServerURL = "${VULTURE_SERVER_URL}"
+    static let supabaseURL          = "${SUPABASE_URL}"
+    static let supabaseAnonKey      = "${SUPABASE_ANON_KEY}"
+    static let geminiAPIKey         = "${GEMINI_API_KEY}"
+    static let vultureServerURL     = "${VULTURE_SERVER_URL}"
+    static let smartSpectraAPIKey   = "${SMART_SPECTRA_API_KEY}"
 }
 SWIFT
 

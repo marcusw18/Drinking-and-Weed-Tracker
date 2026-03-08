@@ -27,6 +27,9 @@ final class AppState {
     var latestHRV: Double? = nil
     var latestSpO2: Double? = nil
 
+    // MARK: - Scan Results (from SmartSpectra + Vision)
+    var lastScanResults: ScanResults? = nil
+
     // MARK: - UI State
     var showAddDrink = false
     var showHistory = false
@@ -41,7 +44,7 @@ final class AppState {
             ? drinkLogs.filter { $0.timestamp >= (sessionStartTime ?? .distantPast) }
             : drinkLogs
         currentBAC = BACCalculator.currentBAC(drinks: sessionDrinks, profile: profile)
-        currentStage = IntoxicationStage.from(bac: currentBAC)
+        currentStage = IntoxicationStage.from(bac: currentBAC, scanResults: lastScanResults)
     }
 
     func startSession() {
